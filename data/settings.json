@@ -1,0 +1,50 @@
+{
+  "open": {
+    "campaign": true,
+    "service": true,
+    "moderator": true,
+    "outreacher": true
+  },
+  "levelUpChannelId": "1400519902976282876",
+  "logChannelId": "1517364435574984745",
+  "inviteLogChannelId": "1400219574695104674",
+  "joinEmoji": "📥",
+  "leaveEmoji": "📤",
+  "verifyEmoji": "✅",
+  "botStatus": "ClippingBase.com",
+  "linkFilterEnabled": true,
+  "embedColor": "#2B2D31",
+  "images": {
+    "verify": null,
+    "submit": null,
+    "levelup": null
+  },
+  "leaderboardStyles": {
+    "level": {
+      "label": "Level Leaderboard",
+      "emoji": "null",
+      "color": "#a2ff00"
+    },
+    "xp": {
+      "label": "XP Leaderboard",
+      "emoji": "✨",
+      "color": "#9B59B6"
+    },
+    "invites": {
+      "label": "Invites Leaderboard",
+      "emoji": "📨",
+      "color": "#5865F2"
+    },
+    "messages": {
+      "label": "Messages Leaderboard",
+      "emoji": "💬",
+      "color": "#57F287"
+    }
+  },
+  "leaderboardRotationMinutes": 2,
+  "levelUpStyle": {
+    "barColor": "#a2ff00",
+    "font": "sans-serif",
+    "headline": "Level Up!"
+  }
+}
