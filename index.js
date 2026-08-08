@@ -97,6 +97,19 @@ function resolveFontFamily(requested) {
   return FONT_FAMILY;
 }
 
+// ==========================================================
+// ===== ADMIN/MOD ROLE CHECK (shared across features) =====
+// Used by the word filter bypass and the --embed builder.
+// Add your Admin/Mod role IDs here.
+// ==========================================================
+const WHITELISTED_ROLES = ['1360755486793666580', '1507406270519312565'];
+
+function isAdminOrMod(member) {
+  if (!member) return false;
+  if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  return member.roles.cache.some(role => WHITELISTED_ROLES.includes(role.id));
+}
+
 function loadJSON(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -2541,6 +2554,45 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // ===== SETTINGS: main menu navigation =====
+    if (interaction.customId.startsWith("open_custom_embed_")) {
+      const targetChannelId = interaction.customId.slice("open_custom_embed_".length);
+
+      if (interaction.guild && !isAdminOrMod(interaction.member)) {
+        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Admins and mods only.", "#ED4245", { ephemeral: true }));
+      }
+
+      const modal = new ModalBuilder().setCustomId(`modalsubmit_custom_embed_${targetChannelId}`).setTitle("Build Embed");
+
+      const descInput = new TextInputBuilder()
+        .setCustomId("description")
+        .setLabel("Description")
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder("Type your embed text exactly as you want it sent")
+        .setRequired(true);
+
+      const footerInput = new TextInputBuilder()
+        .setCustomId("footer")
+        .setLabel("Footer (optional)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Leave empty for no footer")
+        .setRequired(false);
+
+      const colorInput = new TextInputBuilder()
+        .setCustomId("color")
+        .setLabel("Color (optional)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Enter hex color e.g. #57F287 — leave empty for default")
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(descInput),
+        new ActionRowBuilder().addComponents(footerInput),
+        new ActionRowBuilder().addComponents(colorInput)
+      );
+
+      return interaction.showModal(modal);
+    }
+
     if (interaction.customId === "open_settings" || interaction.customId === "settings_back_main") {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Admins only.", "#ED4245", { ephemeral: true }));
@@ -3239,6 +3291,57 @@ client.on(Events.InteractionCreate, async interaction => {
   // ===== MODAL SUBMIT HANDLER =====
   if (interaction.isModalSubmit()) {
 
+    // Custom embed builder: send exactly what was typed as an embed
+    if (interaction.customId.startsWith("modalsubmit_custom_embed_")) {
+      const targetChannelId = interaction.customId.slice("modalsubmit_custom_embed_".length);
+
+      // No .trim() on description/footer -- sent exactly as typed,
+      // preserving leading/trailing spaces and internal line breaks.
+      const description = interaction.fields.getTextInputValue("description");
+      const footer = interaction.fields.getTextInputValue("footer");
+      const colorRaw = interaction.fields.getTextInputValue("color").trim();
+
+      let color = settings.embedColor;
+      if (colorRaw !== "") {
+        const HEX_COLOR_REGEX = /^#?[0-9A-Fa-f]{6}$/;
+        if (!HEX_COLOR_REGEX.test(colorRaw)) {
+          return interaction.reply({
+            content: `❌ \`${colorRaw}\` isn't a valid hex color. Use a format like \`#57F287\`, or leave the field empty to use the default embed color.`,
+            ephemeral: true
+          });
+        }
+        color = colorRaw.startsWith("#") ? colorRaw : `#${colorRaw}`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setDescription(description)
+        .setColor(color);
+
+      if (footer.trim() !== "") {
+        embed.setFooter({ text: footer });
+      }
+
+      let targetChannel;
+      try {
+        targetChannel = await client.channels.fetch(targetChannelId);
+      } catch (err) {
+        targetChannel = null;
+      }
+
+      if (!targetChannel || !targetChannel.isTextBased()) {
+        return interaction.reply({ content: "❌ Couldn't find the original channel to post this embed in — it may have been deleted.", ephemeral: true });
+      }
+
+      await targetChannel.send({ embeds: [embed] });
+
+      // Clean up the "Build Embed" prompt (works whether it was a DM or an in-channel fallback message).
+      if (interaction.message) {
+        interaction.message.delete().catch(() => {});
+      }
+
+      return interaction.reply({ content: "✅ Embed sent.", ephemeral: true });
+    }
+
     // Dashboard: save the new level-up notification channel
     if (interaction.customId === "modal_levelup_channel") {
       const channelId = parseChannelId(interaction.fields.getTextInputValue("channelId"));
@@ -3901,6 +4004,39 @@ client.on("messageCreate", async (message) => {
     }
   }
 
+  // ===== CUSTOM EMBED BUILDER (type "--embed") =====
+  if (message.content.trim().toLowerCase() === "--embed") {
+    if (!isAdminOrMod(message.member)) {
+      return message.reply(embedReplyOptions(message.author, message.guild, "❌ Admins and mods only.", "#ED4245"));
+    }
+
+    await message.delete().catch(() => {});
+
+    // The target channel is embedded in the button's customId so the
+    // final embed still posts to the right place even though the
+    // button itself is sent privately via DM.
+    const openButton = new ButtonBuilder()
+      .setCustomId(`open_custom_embed_${message.channel.id}`)
+      .setLabel("📝 Build Embed")
+      .setStyle(ButtonStyle.Primary);
+
+    try {
+      await message.author.send({
+        content: `Click below to build your embed for **#${message.channel.name}** in **${message.guild.name}**.`,
+        components: [new ActionRowBuilder().addComponents(openButton)]
+      });
+    } catch (dmErr) {
+      // DMs closed -- fall back to posting in-channel, since there's
+      // no way to make a plain message private without an interaction.
+      const fallback = await message.channel.send({
+        content: `${message.author}, I couldn't DM you (check your privacy settings), so here's the button instead:`,
+        components: [new ActionRowBuilder().addComponents(openButton)]
+      });
+      setTimeout(() => fallback.delete().catch(() => {}), 60000);
+    }
+    return;
+  }
+
   // ===== SUBMIT PANEL TEXT EDITOR (type your panel text + "--submit") =====
   if (message.content.toLowerCase().includes("--submit")) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -3955,8 +4091,6 @@ client.on("messageCreate", async (message) => {
   }
 
   // ===== WORD FILTER =====
-  const WHITELISTED_ROLES = ['1360755486793666580', '1507406270519312565']; // <-- Add Admin/Mod role IDs to bypass filters
-
   if (message.member && message.member.roles.cache.some(role => WHITELISTED_ROLES.includes(role.id))) return;
 
   // ===== DISCORD INVITE LINK FILTER (toggleable in Settings > Invite Links) =====
