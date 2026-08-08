@@ -1,4 +1,5 @@
-  "name": "Clippingbase bot",
+{
+  "name": "clippingbase-bot",
   "version": "1.0.0",
   "description": "clippingbase Discord bot: submission panel, moderation dashboard, leveling system, word filters.",
   "main": "index.js",
