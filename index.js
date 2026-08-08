@@ -176,7 +176,8 @@ let settings = loadJSON(SETTINGS_FILE, {
   },
   xp: {
     perTrigger: 100,
-    messagesPerTrigger: 1
+    messagesPerTrigger: 1,
+    cooldownSeconds: 8
   }
 });
 
@@ -228,6 +229,7 @@ if (!settings.levelUpStyle.headline) settings.levelUpStyle.headline = "Level-up!
 if (!settings.xp) settings.xp = { perTrigger: 100, messagesPerTrigger: 1 };
 if (!settings.xp.perTrigger) settings.xp.perTrigger = 100;
 if (!settings.xp.messagesPerTrigger) settings.xp.messagesPerTrigger = 1;
+if (!settings.xp.cooldownSeconds && settings.xp.cooldownSeconds !== 0) settings.xp.cooldownSeconds = 8;
 function saveSettings() { saveJSON(SETTINGS_FILE, settings); }
 
 // Applies settings.botStatus as a "Watching ..." presence. Called on ready
@@ -759,6 +761,7 @@ async function announceLevelUp(user, guild, oldLevel, newLevel, currentXp) {
 }
 
 const messageCounts = new Map();
+const xpCooldowns = new Map(); // userId -> timestamp of last XP-eligible message, prevents spam-farming XP
 
 const voiceJoinTimes = new Map();
 const VOICE_XP_PER_MINUTE = 10;
@@ -1630,6 +1633,7 @@ function buildXpSettingsEmbed(guild) {
     .addFields(
       { name: "⚡ XP Per Trigger", value: `**${settings.xp.perTrigger}** XP`, inline: true },
       { name: "💬 Messages Required", value: `Every **${settings.xp.messagesPerTrigger}** message(s) sent`, inline: true },
+      { name: "🛡️ Anti-Spam Cooldown", value: settings.xp.cooldownSeconds > 0 ? `**${settings.xp.cooldownSeconds}s** between XP-eligible messages` : "Disabled", inline: true },
       { name: "🎁 Active/Scheduled XP Giveaways", value: activeValue, inline: false }
     )
     .setFooter(settingsFooter(guild))
@@ -3092,9 +3096,16 @@ client.on(Events.InteractionCreate, async interaction => {
         .setStyle(TextInputStyle.Short)
         .setPlaceholder(`Currently: ${settings.xp.messagesPerTrigger}`)
         .setRequired(true);
+      const cooldownInput = new TextInputBuilder()
+        .setCustomId("cooldown")
+        .setLabel(safeLabel("Anti-spam cooldown (seconds, 0=off)"))
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(`Currently: ${settings.xp.cooldownSeconds}`)
+        .setRequired(true);
       modal.addComponents(
         new ActionRowBuilder().addComponents(amountInput),
-        new ActionRowBuilder().addComponents(messagesInput)
+        new ActionRowBuilder().addComponents(messagesInput),
+        new ActionRowBuilder().addComponents(cooldownInput)
       );
       return interaction.showModal(modal);
     }
@@ -3613,16 +3624,18 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.customId === "modalsubmit_xp_rate") {
       const amount = parseInt(interaction.fields.getTextInputValue("amount").trim(), 10);
       const messages = parseInt(interaction.fields.getTextInputValue("messages").trim(), 10);
+      const cooldown = parseInt(interaction.fields.getTextInputValue("cooldown").trim(), 10);
 
-      if (isNaN(amount) || amount < 1 || isNaN(messages) || messages < 1) {
-        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Both fields must be whole numbers of 1 or more.", "#ED4245", { ephemeral: true }));
+      if (isNaN(amount) || amount < 1 || isNaN(messages) || messages < 1 || isNaN(cooldown) || cooldown < 0) {
+        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ XP and messages must be 1 or more; cooldown must be 0 or more.", "#ED4245", { ephemeral: true }));
       }
 
       settings.xp.perTrigger = amount;
       settings.xp.messagesPerTrigger = messages;
+      settings.xp.cooldownSeconds = cooldown;
       saveSettings();
 
-      return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, `✅ Users now earn **${amount} XP** every **${messages}** message(s) sent.`, "#57F287", { ephemeral: true }));
+      return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, `✅ Users now earn **${amount} XP** every **${messages}** message(s) sent${cooldown > 0 ? `, with a **${cooldown}s** anti-spam cooldown between XP-eligible messages` : " (anti-spam cooldown disabled)"}.`, "#57F287", { ephemeral: true }));
     }
 
     // Start an XP giveaway
@@ -3864,16 +3877,27 @@ client.on("messageCreate", async (message) => {
   saveMessageStats();
 
   // ===== MESSAGE XP (configurable in Settings > XP Settings) =====
-  const messagesPerTrigger = Math.max(1, Number(settings.xp.messagesPerTrigger) || 1);
-  const xpPerTrigger = Math.max(1, Number(settings.xp.perTrigger) || 100);
+  // Cooldown prevents a user from spamming rapid-fire messages to farm
+  // XP much faster than intended -- only messages spaced out by at
+  // least cooldownSeconds count toward the level-up trigger.
+  const cooldownMs = Math.max(0, Number(settings.xp.cooldownSeconds) || 0) * 1000;
+  const lastXpMsg = xpCooldowns.get(message.author.id) || 0;
+  const onCooldown = cooldownMs > 0 && (Date.now() - lastXpMsg) < cooldownMs;
 
-  const newCount = (messageCounts.get(message.author.id) || 0) + 1;
-  messageCounts.set(message.author.id, newCount);
+  if (!onCooldown) {
+    xpCooldowns.set(message.author.id, Date.now());
 
-  if (newCount % messagesPerTrigger === 0) {
-    const { leveledUp, oldLevel, newLevel, currentXp } = addXP(message.author.id, xpPerTrigger);
-    if (leveledUp) {
-      await announceLevelUp(message.author, message.guild, oldLevel, newLevel, currentXp);
+    const messagesPerTrigger = Math.max(1, Number(settings.xp.messagesPerTrigger) || 1);
+    const xpPerTrigger = Math.max(1, Number(settings.xp.perTrigger) || 100);
+
+    const newCount = (messageCounts.get(message.author.id) || 0) + 1;
+    messageCounts.set(message.author.id, newCount);
+
+    if (newCount % messagesPerTrigger === 0) {
+      const { leveledUp, oldLevel, newLevel, currentXp } = addXP(message.author.id, xpPerTrigger);
+      if (leveledUp) {
+        await announceLevelUp(message.author, message.guild, oldLevel, newLevel, currentXp);
+      }
     }
   }
 
