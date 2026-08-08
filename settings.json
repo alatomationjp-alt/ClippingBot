@@ -1,0 +1,105 @@
+{
+  "open": {
+    "campaign": true,
+    "service": true,
+    "moderator": true,
+    "outreacher": true
+  },
+  "levelUpChannelId": "1400519902976282876",
+  "logChannelId": "1517364435574984745",
+  "inviteLogChannelId": "1400219574695104674",
+  "joinEmoji": "📥",
+  "leaveEmoji": "📤",
+  "verifyEmoji": "✅",
+  "botStatus": "ClippingBase.com",
+  "linkFilterEnabled": true,
+  "embedColor": "#76EC10",
+  "images": {
+    "verify": null,
+    "submit": null,
+    "levelup": null,
+    "leaderboard": null
+  },
+  "leaderboardStyles": {
+    "level": {
+      "label": "Level Leaderboard",
+      "emoji": "null",
+      "color": "#a2ff00"
+    },
+    "xp": {
+      "label": "XP Leaderboard",
+      "emoji": "✨",
+      "color": "#9B59B6"
+    },
+    "invites": {
+      "label": "Invites Leaderboard",
+      "emoji": "📨",
+      "color": "#5865F2"
+    },
+    "messages": {
+      "label": "Messages Leaderboard",
+      "emoji": "💬",
+      "color": "#57F287"
+    }
+  },
+  "leaderboardRotationMinutes": 1,
+  "levelUpStyle": {
+    "barColor": "#a2ff00",
+    "font": "sans-serif",
+    "headline": "Level Up!",
+    "layout": {
+      "avatar": {
+        "x": 40,
+        "y": 40,
+        "size": 90
+      },
+      "userLine": {
+        "x": null,
+        "y": null,
+        "size": 50
+      },
+      "headline": {
+        "x": 450,
+        "y": 185,
+        "size": 68
+      },
+      "subline": {
+        "x": 450,
+        "y": 240,
+        "size": 34
+      },
+      "progressBar": {
+        "x": 450,
+        "y": 272,
+        "width": 500,
+        "height": 20
+      },
+      "xpText": {
+        "x": 740,
+        "y": 78,
+        "size": 30
+      }
+    }
+  },
+  "announcementChannelId": "1400219324853256316",
+  "submitPanelColor": "#76EC10",
+  "buttonLabels": {
+    "verify": "Verify",
+    "openOptions": "Open Options"
+  },
+  "verifyPanel": {
+    "description": "",
+    "color": "#2B2D31",
+    "image": null,
+    "buttonColor": "green",
+    "buttonEmoji": "✅",
+    "panelChannelId": "1400219324853256316",
+    "panelMessageId": "1535456979991011450"
+  },
+  "leaderboardIcon": "<:arrow:1533293605928566955>",
+  "leaderboardDisplayCount": 10,
+  "xp": {
+    "perTrigger": 500,
+    "messagesPerTrigger": 1
+  }
+}

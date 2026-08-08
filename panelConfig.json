@@ -1,0 +1,33 @@
+{
+  "title": "ClippingBase — Submissions & Applications",
+  "description": "sdsdds",
+  "footer": "ClippingBase — Submissions & Applications",
+  "types": {
+    "campaign": {
+      "buttonLabel": "Promotion Campaign",
+      "buttonColor": "",
+      "text": "",
+      "emoji": "🚀"
+    },
+    "service": {
+      "buttonLabel": "Service Provider",
+      "buttonColor": "",
+      "text": "",
+      "emoji": "<:TikTok:1533292957753540788>"
+    },
+    "moderator": {
+      "buttonLabel": "Content Moderator",
+      "buttonColor": "",
+      "text": "",
+      "emoji": "🛡️"
+    },
+    "outreacher": {
+      "buttonLabel": "Outreacher",
+      "buttonColor": "",
+      "text": "",
+      "emoji": "🤝"
+    }
+  },
+  "panelMessageId": "1535437826844393515",
+  "panelChannelId": "1527837866728751225"
+}
