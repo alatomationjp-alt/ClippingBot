@@ -1544,7 +1544,7 @@ function buildLevelUpCardSettingsEmbed(guild) {
       { name: "📢 Headline Text", value: style.headline, inline: false },
       { name: "🖼️ Background Position/Zoom", value: `offsetX: \`${bgT.offsetX}\`, offsetY: \`${bgT.offsetY}\`, zoom: \`${bgT.zoom}\``, inline: false },
       { name: "👤 Avatar", value: `x:${layout.avatar.x} y:${layout.avatar.y} size:${layout.avatar.size}`, inline: true },
-      { name: "🏷️ User Line", value: `x:${layout.userLine.x ?? "auto"} y:${layout.userLine.y ?? "auto"} size:${layout.userLine.size}`, inline: true },
+      { name: "🏷️ User Line", value: `x:${layout.userLine.x != null ? layout.userLine.x : "auto"} y:${layout.userLine.y != null ? layout.userLine.y : "auto"} size:${layout.userLine.size}`, inline: true },
       { name: "🅰️ Headline Pos", value: `x:${layout.headline.x} y:${layout.headline.y} size:${layout.headline.size}`, inline: true },
       { name: "🔢 Sub Line Pos", value: `x:${layout.subline.x} y:${layout.subline.y} size:${layout.subline.size}`, inline: true },
       { name: "📶 Progress Bar Pos", value: `x(center):${layout.progressBar.x} y:${layout.progressBar.y} w:${layout.progressBar.width} h:${layout.progressBar.height}`, inline: true },
@@ -2985,7 +2985,7 @@ client.on(Events.InteractionCreate, async interaction => {
         .setCustomId("userLine")
         .setLabel(safeLabel("User Line: x,y,size (or auto,auto,size)"))
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder(`Currently: ${layout.userLine.x ?? "auto"},${layout.userLine.y ?? "auto"},${layout.userLine.size}`)
+        .setPlaceholder(`Currently: ${layout.userLine.x != null ? layout.userLine.x : "auto"},${layout.userLine.y != null ? layout.userLine.y : "auto"},${layout.userLine.size}`)
         .setRequired(true);
       const headlineInput = new TextInputBuilder()
         .setCustomId("headline")
