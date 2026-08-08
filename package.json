@@ -1,16 +1,17 @@
-{
   "name": "Clippingbase bot",
   "version": "1.0.0",
   "description": "clippingbase Discord bot: submission panel, moderation dashboard, leveling system, word filters.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npm install @napi-rs/canvas-linux-x64-gnu --no-save"
   },
   "engines": {
     "node": "18.x"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.53",
+    "@napi-rs/canvas-linux-x64-gnu": "^0.1.100",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5"
   }
