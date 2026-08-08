@@ -60,17 +60,41 @@ if (!fs.existsSync(ASSETS_DIR)) fs.mkdirSync(ASSETS_DIR);
 // Register bundled fonts so rank/level-up card text actually renders.
 // Railway's container has no system fonts installed by default, so
 // @napi-rs/canvas has nothing to draw glyphs with unless we point it
-// at real font files ourselves.
+// at real font files ourselves. Only fonts listed here can ever be
+// selected via Settings > Level-Up Style > Font — typing anything else
+// silently falls back to the default, since unregistered fonts have no
+// files for the canvas engine to actually draw with.
 const FONTS_DIR = path.join(ASSETS_DIR, "fonts");
-const FONT_FAMILY = "Bricolage Grotesque";
+const FONT_FAMILY = "Bricolage Grotesque"; // default/fallback
+const AVAILABLE_FONTS = {
+  "Bricolage Grotesque": ["BricolageGrotesque-Bold.ttf", "BricolageGrotesque-Regular.ttf"],
+  "Outfit": ["Outfit-Bold.ttf", "Outfit-Regular.ttf"],
+  "Work Sans": ["WorkSans-Bold.ttf", "WorkSans-Regular.ttf"],
+  "Big Shoulders": ["BigShoulders-Bold.ttf", "BigShoulders-Regular.ttf"],
+  "JetBrains Mono": ["JetBrainsMono-Bold.ttf", "JetBrainsMono-Regular.ttf"],
+  "Silkscreen": ["Silkscreen-Regular.ttf"],
+  "Tektur": ["Tektur-Medium.ttf"],
+  "IBM Plex Serif": ["IBMPlexSerif-Bold.ttf", "IBMPlexSerif-Regular.ttf"]
+};
+
 try {
-  const boldPath = path.join(FONTS_DIR, "BricolageGrotesque-Bold.ttf");
-  const regularPath = path.join(FONTS_DIR, "BricolageGrotesque-Regular.ttf");
-  if (fs.existsSync(boldPath)) GlobalFonts.registerFromPath(boldPath, FONT_FAMILY);
-  if (fs.existsSync(regularPath)) GlobalFonts.registerFromPath(regularPath, FONT_FAMILY);
-  console.log("✅ Card font registered:", GlobalFonts.has(FONT_FAMILY) ? FONT_FAMILY : "FAILED");
+  for (const [family, files] of Object.entries(AVAILABLE_FONTS)) {
+    for (const file of files) {
+      const p = path.join(FONTS_DIR, file);
+      if (fs.existsSync(p)) GlobalFonts.registerFromPath(p, family);
+    }
+  }
+  const registered = Object.keys(AVAILABLE_FONTS).filter(f => GlobalFonts.has(f));
+  console.log(`✅ Card fonts registered (${registered.length}/${Object.keys(AVAILABLE_FONTS).length}):`, registered.join(", "));
 } catch (err) {
-  console.log("⚠️ Could not register card font:", err.message);
+  console.log("⚠️ Could not register card fonts:", err.message);
+}
+
+// Resolves a user-typed font name (from Settings) to a font we actually
+// have registered, falling back to the default when it doesn't match.
+function resolveFontFamily(requested) {
+  if (requested && GlobalFonts.has(requested)) return requested;
+  return FONT_FAMILY;
 }
 
 function loadJSON(file, fallback) {
@@ -523,7 +547,7 @@ async function generateLevelUpImage(user, oldLevel, newLevel, currentXp) {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
   const style = settings.levelUpStyle || { barColor: "#57F287", font: FONT_FAMILY, headline: "Level-up!" };
-  const font = (style.font && style.font !== "sans-serif") ? style.font : FONT_FAMILY;
+  const font = resolveFontFamily(style.font);
   const layout = getLevelUpLayout();
   const bgT = getBackgroundTransform();
 
@@ -616,7 +640,7 @@ async function generateRankImage(user, level, currentXp, totalXp) {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
   const style = settings.levelUpStyle || { barColor: "#57F287", font: FONT_FAMILY };
-  const font = (style.font && style.font !== "sans-serif") ? style.font : FONT_FAMILY;
+  const font = resolveFontFamily(style.font);
   const layout = getLevelUpLayout();
   const bgT = getBackgroundTransform();
 
@@ -2928,7 +2952,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const modal = new ModalBuilder().setCustomId("modalsubmit_levelup_font").setTitle("Edit Font");
       const input = new TextInputBuilder()
         .setCustomId("font")
-        .setLabel(safeLabel("CSS font family, e.g. sans-serif"))
+        .setLabel(safeLabel("Font name (see /rank help for list)"))
         .setStyle(TextInputStyle.Short)
         .setPlaceholder(`Currently: ${settings.levelUpStyle.font}`)
         .setRequired(true);
@@ -3496,9 +3520,20 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.customId === "modalsubmit_levelup_font") {
       const font = interaction.fields.getTextInputValue("font").trim();
-      settings.levelUpStyle.font = font;
+      const validNames = Object.keys(AVAILABLE_FONTS);
+      const match = validNames.find(f => f.toLowerCase() === font.toLowerCase());
+      if (!match) {
+        return interaction.reply(embedReplyOptions(
+          interaction.user,
+          interaction.guild,
+          `❌ \`${font}\` isn't a font this bot has installed, so cards would silently fall back to the default instead.\n\n**Valid options:**\n${validNames.map(f => `• ${f}`).join("\n")}`,
+          "#ED4245",
+          { ephemeral: true }
+        ));
+      }
+      settings.levelUpStyle.font = match;
       saveSettings();
-      return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, `✅ Font set to \`${font}\`.`, "#57F287", { ephemeral: true }));
+      return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, `✅ Font set to \`${match}\`.`, "#57F287", { ephemeral: true }));
     }
 
     if (interaction.customId === "modalsubmit_levelup_headline") {
@@ -4081,6 +4116,30 @@ client.on("messageCreate", async (message) => {
 // ==========================================================
 // ===== LOGIN =====
 // ==========================================================
+
+// ==========================================================
+// ===== GLOBAL ERROR HANDLING =====
+// Without these, a single unexpected error (a bad API response,
+// a malformed interaction, a timing issue) can crash the entire
+// process and take the bot fully offline until Railway restarts it.
+// These log the error and keep the bot running instead.
+// ==========================================================
+
+process.on("unhandledRejection", (err) => {
+  console.error("⚠️ Unhandled promise rejection:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught exception:", err);
+});
+
+client.on("error", (err) => {
+  console.error("⚠️ Discord client error:", err);
+});
+
+client.on("shardError", (err) => {
+  console.error("⚠️ Discord shard connection error:", err);
+});
 
 client.login(process.env.TOKEN)
   .then(() => console.log("✅ Login request sent to Discord"))
