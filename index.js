@@ -806,6 +806,10 @@ const commands = [
     .setDescription("Open the moderation dashboard (admin Only)"),
 
   new SlashCommandBuilder()
+    .setName("embed")
+    .setDescription("Build and send a custom embed to this channel (Admin/Mod only)"),
+
+  new SlashCommandBuilder()
     .setName("rank")
     .setDescription("Check your level and XP progress")
     .addUserOption(option => option.setName("user").setDescription("Check someone else's rank").setRequired(false)),
@@ -2191,6 +2195,23 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.reply({ ...payload, ephemeral: true });
     }
 
+    if (interaction.commandName === "embed") {
+      if (!isAdminOrMod(interaction.member)) {
+        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Admins and mods only.", "#ED4245", { ephemeral: true }));
+      }
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("embed_builder_select")
+        .setPlaceholder("Choose an option...")
+        .addOptions({ label: "📝 Build Embed", value: "build", description: `Create and send an embed to #${interaction.channel.name}` });
+
+      return interaction.reply({
+        content: `Building an embed for **#${interaction.channel.name}**:`,
+        components: [new ActionRowBuilder().addComponents(menu)],
+        ephemeral: true
+      });
+    }
+
     if (interaction.commandName === "verifysetup") {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ You must be an admin to use this command.", "#ED4245", { ephemeral: true }));
@@ -2269,6 +2290,52 @@ client.on(Events.InteractionCreate, async interaction => {
 
   // ===== SELECT MENU HANDLER =====
   if (interaction.isStringSelectMenu()) {
+
+    // /embed: dropdown selected -> open the embed builder modal
+    if (interaction.customId === "embed_builder_select") {
+      if (!isAdminOrMod(interaction.member)) {
+        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Admins and mods only.", "#ED4245", { ephemeral: true }));
+      }
+
+      const modal = new ModalBuilder().setCustomId("modalsubmit_embed_builder").setTitle("Build Embed");
+
+      const titleInput = new TextInputBuilder()
+        .setCustomId("title")
+        .setLabel("Title (optional)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Leave empty for no title")
+        .setRequired(false);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId("description")
+        .setLabel("Description (optional)")
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder("Type your embed text exactly as you want it sent")
+        .setRequired(false);
+
+      const footerInput = new TextInputBuilder()
+        .setCustomId("footer")
+        .setLabel("Footer (optional)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Leave empty for no footer")
+        .setRequired(false);
+
+      const colorInput = new TextInputBuilder()
+        .setCustomId("color")
+        .setLabel("Color (optional)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Enter hex color e.g. #57F287 — leave empty for default")
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(titleInput),
+        new ActionRowBuilder().addComponents(descInput),
+        new ActionRowBuilder().addComponents(footerInput),
+        new ActionRowBuilder().addComponents(colorInput)
+      );
+
+      return interaction.showModal(modal);
+    }
 
     // Dropdown from "Open Options" -> the person picked an application type
     if (interaction.customId === SUBMIT_TYPE_SELECT_ID) {
@@ -2554,44 +2621,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // ===== SETTINGS: main menu navigation =====
-    if (interaction.customId.startsWith("open_custom_embed_")) {
-      const targetChannelId = interaction.customId.slice("open_custom_embed_".length);
-
-      if (interaction.guild && !isAdminOrMod(interaction.member)) {
-        return interaction.reply(embedReplyOptions(interaction.user, interaction.guild, "❌ Admins and mods only.", "#ED4245", { ephemeral: true }));
-      }
-
-      const modal = new ModalBuilder().setCustomId(`modalsubmit_custom_embed_${targetChannelId}`).setTitle("Build Embed");
-
-      const descInput = new TextInputBuilder()
-        .setCustomId("description")
-        .setLabel("Description")
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder("Type your embed text exactly as you want it sent")
-        .setRequired(true);
-
-      const footerInput = new TextInputBuilder()
-        .setCustomId("footer")
-        .setLabel("Footer (optional)")
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder("Leave empty for no footer")
-        .setRequired(false);
-
-      const colorInput = new TextInputBuilder()
-        .setCustomId("color")
-        .setLabel("Color (optional)")
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder("Enter hex color e.g. #57F287 — leave empty for default")
-        .setRequired(false);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(descInput),
-        new ActionRowBuilder().addComponents(footerInput),
-        new ActionRowBuilder().addComponents(colorInput)
-      );
-
-      return interaction.showModal(modal);
-    }
 
     if (interaction.customId === "open_settings" || interaction.customId === "settings_back_main") {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -3291,15 +3320,21 @@ client.on(Events.InteractionCreate, async interaction => {
   // ===== MODAL SUBMIT HANDLER =====
   if (interaction.isModalSubmit()) {
 
-    // Custom embed builder: send exactly what was typed as an embed
-    if (interaction.customId.startsWith("modalsubmit_custom_embed_")) {
-      const targetChannelId = interaction.customId.slice("modalsubmit_custom_embed_".length);
-
-      // No .trim() on description/footer -- sent exactly as typed,
+    // /embed builder: send exactly what was typed as an embed to the channel the command was run in
+    if (interaction.customId === "modalsubmit_embed_builder") {
+      // No .trim() on title/description/footer -- sent exactly as typed,
       // preserving leading/trailing spaces and internal line breaks.
+      const title = interaction.fields.getTextInputValue("title");
       const description = interaction.fields.getTextInputValue("description");
       const footer = interaction.fields.getTextInputValue("footer");
       const colorRaw = interaction.fields.getTextInputValue("color").trim();
+
+      if (title.trim() === "" && description.trim() === "") {
+        return interaction.reply({
+          content: "❌ You need at least a title or a description — an embed can't be completely empty.",
+          ephemeral: true
+        });
+      }
 
       let color = settings.embedColor;
       if (colorRaw !== "") {
@@ -3313,31 +3348,16 @@ client.on(Events.InteractionCreate, async interaction => {
         color = colorRaw.startsWith("#") ? colorRaw : `#${colorRaw}`;
       }
 
-      const embed = new EmbedBuilder()
-        .setDescription(description)
-        .setColor(color);
+      const embed = new EmbedBuilder().setColor(color);
+      if (title.trim() !== "") embed.setTitle(title);
+      if (description.trim() !== "") embed.setDescription(description);
+      if (footer.trim() !== "") embed.setFooter({ text: footer });
 
-      if (footer.trim() !== "") {
-        embed.setFooter({ text: footer });
+      if (!interaction.channel || !interaction.channel.isTextBased()) {
+        return interaction.reply({ content: "❌ Couldn't find this channel to post the embed in.", ephemeral: true });
       }
 
-      let targetChannel;
-      try {
-        targetChannel = await client.channels.fetch(targetChannelId);
-      } catch (err) {
-        targetChannel = null;
-      }
-
-      if (!targetChannel || !targetChannel.isTextBased()) {
-        return interaction.reply({ content: "❌ Couldn't find the original channel to post this embed in — it may have been deleted.", ephemeral: true });
-      }
-
-      await targetChannel.send({ embeds: [embed] });
-
-      // Clean up the "Build Embed" prompt (works whether it was a DM or an in-channel fallback message).
-      if (interaction.message) {
-        interaction.message.delete().catch(() => {});
-      }
+      await interaction.channel.send({ embeds: [embed] });
 
       return interaction.reply({ content: "✅ Embed sent.", ephemeral: true });
     }
@@ -4002,39 +4022,6 @@ client.on("messageCreate", async (message) => {
         await announceLevelUp(message.author, message.guild, oldLevel, newLevel, currentXp);
       }
     }
-  }
-
-  // ===== CUSTOM EMBED BUILDER (type "--embed") =====
-  if (message.content.trim().toLowerCase() === "--embed") {
-    if (!isAdminOrMod(message.member)) {
-      return message.reply(embedReplyOptions(message.author, message.guild, "❌ Admins and mods only.", "#ED4245"));
-    }
-
-    await message.delete().catch(() => {});
-
-    // The target channel is embedded in the button's customId so the
-    // final embed still posts to the right place even though the
-    // button itself is sent privately via DM.
-    const openButton = new ButtonBuilder()
-      .setCustomId(`open_custom_embed_${message.channel.id}`)
-      .setLabel("📝 Build Embed")
-      .setStyle(ButtonStyle.Primary);
-
-    try {
-      await message.author.send({
-        content: `Click below to build your embed for **#${message.channel.name}** in **${message.guild.name}**.`,
-        components: [new ActionRowBuilder().addComponents(openButton)]
-      });
-    } catch (dmErr) {
-      // DMs closed -- fall back to posting in-channel, since there's
-      // no way to make a plain message private without an interaction.
-      const fallback = await message.channel.send({
-        content: `${message.author}, I couldn't DM you (check your privacy settings), so here's the button instead:`,
-        components: [new ActionRowBuilder().addComponents(openButton)]
-      });
-      setTimeout(() => fallback.delete().catch(() => {}), 60000);
-    }
-    return;
   }
 
   // ===== SUBMIT PANEL TEXT EDITOR (type your panel text + "--submit") =====
