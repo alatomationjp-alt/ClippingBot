@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 
 const {
   Client,
@@ -56,6 +56,22 @@ function resolveLevelUpBgPath() {
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(ASSETS_DIR)) fs.mkdirSync(ASSETS_DIR);
+
+// Register bundled fonts so rank/level-up card text actually renders.
+// Railway's container has no system fonts installed by default, so
+// @napi-rs/canvas has nothing to draw glyphs with unless we point it
+// at real font files ourselves.
+const FONTS_DIR = path.join(ASSETS_DIR, "fonts");
+const FONT_FAMILY = "Bricolage Grotesque";
+try {
+  const boldPath = path.join(FONTS_DIR, "BricolageGrotesque-Bold.ttf");
+  const regularPath = path.join(FONTS_DIR, "BricolageGrotesque-Regular.ttf");
+  if (fs.existsSync(boldPath)) GlobalFonts.registerFromPath(boldPath, FONT_FAMILY);
+  if (fs.existsSync(regularPath)) GlobalFonts.registerFromPath(regularPath, FONT_FAMILY);
+  console.log("✅ Card font registered:", GlobalFonts.has(FONT_FAMILY) ? FONT_FAMILY : "FAILED");
+} catch (err) {
+  console.log("⚠️ Could not register card font:", err.message);
+}
 
 function loadJSON(file, fallback) {
   try {
@@ -131,7 +147,7 @@ let settings = loadJSON(SETTINGS_FILE, {
   leaderboardDisplayCount: 10,
   levelUpStyle: {
     barColor: "#57F287",
-    font: "sans-serif",
+    font: FONT_FAMILY,
     headline: "Level-up!"
   },
   xp: {
@@ -180,10 +196,10 @@ if (!settings.leaderboardRotationMinutes) settings.leaderboardRotationMinutes = 
 if (settings.leaderboardIcon === undefined) settings.leaderboardIcon = "➤";
 if (!settings.leaderboardDisplayCount) settings.leaderboardDisplayCount = 10;
 if (!settings.levelUpStyle) {
-  settings.levelUpStyle = { barColor: "#57F287", font: "sans-serif", headline: "Level-up!" };
+  settings.levelUpStyle = { barColor: "#57F287", font: FONT_FAMILY, headline: "Level-up!" };
 }
 if (!settings.levelUpStyle.barColor) settings.levelUpStyle.barColor = "#57F287";
-if (!settings.levelUpStyle.font) settings.levelUpStyle.font = "sans-serif";
+if (!settings.levelUpStyle.font) settings.levelUpStyle.font = FONT_FAMILY;
 if (!settings.levelUpStyle.headline) settings.levelUpStyle.headline = "Level-up!";
 if (!settings.xp) settings.xp = { perTrigger: 100, messagesPerTrigger: 1 };
 if (!settings.xp.perTrigger) settings.xp.perTrigger = 100;
@@ -506,8 +522,8 @@ function getBackgroundTransform() {
 async function generateLevelUpImage(user, oldLevel, newLevel, currentXp) {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
-  const style = settings.levelUpStyle || { barColor: "#57F287", font: "sans-serif", headline: "Level-up!" };
-  const font = style.font || "sans-serif";
+  const style = settings.levelUpStyle || { barColor: "#57F287", font: FONT_FAMILY, headline: "Level-up!" };
+  const font = (style.font && style.font !== "sans-serif") ? style.font : FONT_FAMILY;
   const layout = getLevelUpLayout();
   const bgT = getBackgroundTransform();
 
@@ -599,8 +615,8 @@ async function generateLevelUpImage(user, oldLevel, newLevel, currentXp) {
 async function generateRankImage(user, level, currentXp, totalXp) {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
-  const style = settings.levelUpStyle || { barColor: "#57F287", font: "sans-serif" };
-  const font = style.font || "sans-serif";
+  const style = settings.levelUpStyle || { barColor: "#57F287", font: FONT_FAMILY };
+  const font = (style.font && style.font !== "sans-serif") ? style.font : FONT_FAMILY;
   const layout = getLevelUpLayout();
   const bgT = getBackgroundTransform();
 
